@@ -1,16 +1,19 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import api from "../../api/auth"; // Main Backend
-import { getComments, addComment, deleteComment, toggleReaction } from "../../api/interactions"; // New Backend
+import api from "../../api/auth";
+import { getComments, addComment, deleteComment, castVote, getReactions } from "../../api/interactions";
 import toast from "react-hot-toast";
-import { useAuthStore } from "../../store/authStore"; // Current User check krne k liye
+import { useAuthStore } from "../../store/authStore";
 
-// Fetch Idea
 const fetchIdeaById = async (id) => {
-  const { data } = await api.get(`/ideas/${id}`);
-  return data;
+  try {
+    const { data } = await api.get(`/ideas/${id}`);
+    return data;
+  } catch (error) {
+    throw new Error("Idea not found");
+  }
 };
 
 export default function IdeaDetail() {
@@ -18,35 +21,40 @@ export default function IdeaDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const [commentText, setCommentText] = useState("");
+  const [commentBody, setCommentBody] = useState("");
 
-  // 1. Fetch Idea
-  const { data: idea, isLoading: ideaLoading } = useQuery({
+  const { data: idea, isLoading: ideaLoading, isError } = useQuery({
     queryKey: ["idea", id],
     queryFn: () => fetchIdeaById(id),
+    retry: 1,
   });
 
-  // 2. Fetch Comments (From new backend)
-  const { data: comments = [], isLoading: commentsLoading } = useQuery({
+  const { data: commentsData, isLoading: commentsLoading } = useQuery({
     queryKey: ["comments", id],
-    queryFn: () => getComments(id),
-    enabled: !!id, // Id ho to hi fetch karein
+    queryFn: () => getComments({ idea_id: id }),
+    enabled: !!id,
   });
 
-  // --- Mutations ---
+  const { data: reactionData } = useQuery({
+    queryKey: ["reactions", id],
+    queryFn: () => getReactions(id),
+    enabled: !!id,
+    refetchInterval: 5000, 
+  });
 
-  // Add Comment
+  const comments = Array.isArray(commentsData) ? commentsData : (commentsData?.comments || commentsData?.items || []);
+  const likeCount = reactionData?.likes ?? reactionData?.like_count ?? reactionData?.count ?? 0;
+
   const commentMutation = useMutation({
     mutationFn: addComment,
     onSuccess: () => {
       toast.success("Comment added!");
-      setCommentText("");
-      queryClient.invalidateQueries({ queryKey: ["comments", id] });
+      setCommentBody("");
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["comments", id] }), 500);
     },
-    onError: () => toast.error("Failed to add comment"),
+    onError: (err) => toast.error(err.response?.data?.detail || "Failed to add comment"),
   });
 
-  // Delete Comment
   const deleteCommentMutation = useMutation({
     mutationFn: deleteComment,
     onSuccess: () => {
@@ -56,13 +64,13 @@ export default function IdeaDetail() {
     onError: () => toast.error("Failed to delete comment"),
   });
 
-  // Vote Idea
   const voteMutation = useMutation({
-    mutationFn: () => toggleReaction(id),
+    mutationFn: () => castVote({ target_id: id, value: 1 }),
     onSuccess: () => {
-      toast.success("Reaction updated!");
-      queryClient.invalidateQueries({ queryKey: ["idea", id] }); // Idea refresh karein taa ke like count update ho
+      toast.success("Voted successfully!");
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["reactions", id] }), 200);
     },
+    onError: (err) => toast.error("Failed to vote"),
   });
 
   const handleDeleteIdea = async () => {
@@ -75,85 +83,108 @@ export default function IdeaDetail() {
     }
   };
 
-  if (ideaLoading) return <div className="pt-20 text-center">Loading post...</div>;
+  if (ideaLoading) return <div className="pt-24 flex justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
+
+  if (isError || !idea) return (
+    <div className="pt-24 text-center px-4">
+      <h2 className="text-xl font-bold text-red-600">Post Not Found</h2>
+      <button onClick={() => navigate("/ideas")} className="text-blue-600 hover:underline mt-4 block mx-auto">
+        &larr; Back to Feed
+      </button>
+    </div>
+  );
 
   return (
-    <div className="pt-20 px-4 bg-gray-50 min-h-screen pb-10">
+    <div className="pt-24 px-4 bg-gray-50 min-h-screen pb-10">
       <div className="max-w-3xl mx-auto">
         
-        {/* --- Main Post Card --- */}
-        <div className="bg-white p-6 rounded-xl shadow-sm mb-6">
+        {/* ✅ Navigation Back Button */}
+      <button 
+          onClick={() => navigate(-1)} 
+          className="mb-6 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition shadow-sm flex items-center gap-2 font-medium"
+        >
+          &larr; Back
+        </button>
+
+        {/* Post Card */}
+        <div className="bg-white p-6 rounded-xl shadow-sm mb-6 border border-gray-100">
           <div className="flex justify-between items-start mb-4">
-            <h1 className="text-3xl font-bold text-gray-900">
-              {idea.current_version.title}
-            </h1>
-            {/* Show Edit/Delete only if current user is owner (Assuming user.id match) */}
+            <h1 className="text-3xl font-bold text-gray-900">{idea.current_version?.title}</h1>
             {user?.id === idea.author_id && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 ml-4">
                 <Link to={`/ideas/edit/${id}`} className="bg-gray-100 px-3 py-1 rounded hover:bg-gray-200 text-sm">Edit</Link>
                 <button onClick={handleDeleteIdea} className="bg-red-50 text-red-600 px-3 py-1 rounded hover:bg-red-100 text-sm">Delete</button>
               </div>
             )}
           </div>
 
-          <div className="prose max-w-none mb-6">
-            <ReactMarkdown>{idea.current_version.body_md}</ReactMarkdown>
+          <div className="prose max-w-none mb-6 text-gray-700">
+            <ReactMarkdown>{idea.current_version?.body_md}</ReactMarkdown>
           </div>
 
-          {/* Like Button */}
-          <button 
-            onClick={() => voteMutation.mutate()} 
-            disabled={voteMutation.isPending}
-            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-full transition"
-          >
-            <span>👍</span>
-            <span className="font-bold">{idea.likes_count || 0} Likes</span>
-          </button>
+          {idea.current_version?.attachments?.map((url, idx) => (
+             <img key={idx} src={url} alt="Attachment" className="rounded-lg mb-4 max-h-96 w-full object-cover" />
+          ))}
+
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <button 
+              onClick={() => voteMutation.mutate()} 
+              disabled={voteMutation.isPending}
+              className="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 px-4 py-2 rounded-full transition text-gray-700 font-medium group"
+            >
+              <span className="group-hover:scale-110 transition">👍</span>
+              <span>{likeCount} Votes</span> 
+            </button>
+          </div>
         </div>
 
-        {/* --- Comments Section --- */}
-        <div className="bg-white p-6 rounded-xl shadow-sm">
-          <h3 className="text-xl font-bold mb-4">Comments</h3>
+        {/* Comments Section */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <h3 className="text-xl font-bold mb-6 text-gray-800">
+            Comments ({comments.length})
+          </h3>
 
-          {/* Comment Input */}
-          <div className="flex gap-2 mb-6">
+          <div className="flex gap-3 mb-8">
             <input 
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              placeholder="Write a comment..."
+              value={commentBody}
+              onChange={(e) => setCommentBody(e.target.value)}
+              placeholder="Share your thoughts..."
               className="flex-1 border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
             />
             <button 
-              onClick={() => commentMutation.mutate({ postId: id, text: commentText })}
-              disabled={!commentText.trim() || commentMutation.isPending}
+              onClick={() => commentMutation.mutate({ idea_id: id, body: commentBody })}
+              disabled={!commentBody.trim() || commentMutation.isPending}
               className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              Post
+              {commentMutation.isPending ? "Posting..." : "Post"}
             </button>
           </div>
 
-          {/* Comments List */}
           <div className="space-y-4">
-            {commentsLoading ? <p>Loading comments...</p> : comments.length === 0 ? (
-              <p className="text-gray-500">No comments yet.</p>
+            {commentsLoading ? (
+              <div className="text-center py-4">Loading comments...</div>
+            ) : comments.length === 0 ? (
+              <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                <p className="text-gray-500">No comments yet.</p>
+              </div>
             ) : (
-              comments.map((c) => (
-                <div key={c.id || c._id} className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex justify-between items-start">
+              comments.map((c, idx) => (
+                <div key={c.id || c._id || idx} className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex justify-between items-start">
                   <div>
-                    <p className="text-gray-800">{c.text}</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      By {c.author_name || "User"}
-                    </p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-sm text-gray-900">
+                        {c.author?.name || c.author_name || "User"}
+                      </span>
+                      {c.created_at && (
+                        <span className="text-xs text-gray-400">
+                          • {new Date(c.created_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-gray-700 text-sm">{c.body || c.text}</p>
                   </div>
-                  
-                  {/* Delete Comment (Only if owner) */}
-                  {user?.id === c.author_id && (
-                    <button 
-                      onClick={() => deleteCommentMutation.mutate(c.id || c._id)}
-                      className="text-red-400 hover:text-red-600 text-xs"
-                    >
-                      Delete
-                    </button>
+                  {(user?.role === 'admin' || user?.id === c.author_id) && (
+                    <button onClick={() => deleteCommentMutation.mutate(c.id || c._id)} className="text-gray-400 hover:text-red-600 p-1">🗑️</button>
                   )}
                 </div>
               ))

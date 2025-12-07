@@ -149,6 +149,7 @@ import Home from "./pages/Home";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AuthCallback from "./pages/AuthCallback"; // Google Login Callback
 import VerifyEmailPage from "./pages/VerifyEmail";
+import TestComments from "./pages/TestComments";
 
 import { useAuthStore } from "./store/authStore";
 import { getMe } from "./api/auth";
@@ -199,6 +200,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/test" element={<TestComments />} />
           {/* === Protected Routes === */}
           
           {/* 1. Dashboard */}

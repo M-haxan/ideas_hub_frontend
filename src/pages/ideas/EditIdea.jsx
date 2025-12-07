@@ -1,62 +1,53 @@
 import React from "react";
 import IdeaForm from "../../components/IdeaForm";
-import { useParams } from "react-router-dom"; // 1. useParams import karein
-import { useQuery } from "@tanstack/react-query"; // 2. useQuery import karein
-import api from "../../api/auth"; // 3. API instance import karein
+import { useParams, useNavigate } from "react-router-dom"; // ✅ Import navigate
+import { useQuery } from "@tanstack/react-query";
+import api from "../../api/auth";
 
-// 4. Data fetch karnay ka function
 const fetchIdeaById = async (id) => {
   const { data } = await api.get(`/ideas/${id}`);
   return data;
 };
 
 export default function EditIdea() {
-  const { id } = useParams(); // URL se 'id' lein
+  const { id } = useParams();
+  const navigate = useNavigate(); // ✅ Hook
 
-  // 5. useQuery se idea fetch karein
   const {
     data: idea,
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ["idea", id], // Key ['idea', 'id']
+    queryKey: ["idea", id],
     queryFn: () => fetchIdeaById(id),
   });
 
-  // 6. Loading aur Error states
-  if (isLoading) {
-    return (
-      <div className="pt-20 px-6 bg-gray-50 min-h-screen text-center">
-        Loading idea for editing...
-      </div>
-    );
-  }
+  if (isLoading) return <div className="pt-24 text-center">Loading...</div>;
+  if (isError) return <div className="pt-24 text-center text-red-600">Error loading idea.</div>;
 
-  if (isError) {
-    return (
-      <div className="pt-20 px-6 bg-gray-50 min-h-screen text-center text-red-600">
-        Error loading idea.
-      </div>
-    );
-  }
-
-  // 7. Data ko form ke format mein transform karein
-  //    (Fetched data 'current_version' mein hai, form flat data expect karta hai)
   const formData = {
-    id: idea.id, // ID ko pass karna zaroori hai
+    id: idea.id,
     title: idea.current_version.title,
     summary: idea.current_version.short_summary,
     description: idea.current_version.body_md,
     tags: idea.tags,
     visibility: idea.visibility,
     stage: idea.stage,
-    targetIndustry: idea.targetIndustry || "", // Yeh field schema mein nahi tha, fallback
+    targetIndustry: idea.targetIndustry || "",
   };
 
   return (
-    <div className="flex justify-center items-start pt-20 min-h-screen bg-gray-50">
+    <div className="flex justify-center items-start pt-20 px-4 min-h-screen bg-gray-50">
       <div className="w-full max-w-2xl">
-        {/* 8. Transformed 'formData' ko 'initialData' mein pass karein */}
+        
+        {/* ✅ Back Button */}
+        <button 
+          onClick={() => navigate(-1)} 
+          className="mb-4 flex items-center text-gray-500 hover:text-gray-900 transition font-medium"
+        >
+          &larr; Cancel Editing
+        </button>
+
         <IdeaForm initialData={formData} isEditing />
       </div>
     </div>

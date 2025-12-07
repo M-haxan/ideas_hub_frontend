@@ -16,21 +16,16 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor (Fixed Loop Issue)
+// Response Interceptor
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-
-    // Agar error 401 hai aur humne retry nahi kiya
     if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true; 
-
+      originalRequest._retry = true;
       try {
         const refreshToken = Cookies.get("refresh_token");
-        if (!refreshToken) {
-          throw new Error("No refresh token found");
-        }
+        if (!refreshToken) throw new Error("No refresh token");
 
         const res = await axios.post("https://ideas-hub-1.onrender.com/auth/refresh", {
           refresh_token: refreshToken,
@@ -38,23 +33,14 @@ api.interceptors.response.use(
 
         const newAccessToken = res.data.access_token;
         Cookies.set("access_token", newAccessToken);
-        
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
         return api(originalRequest);
-
       } catch (refreshError) {
-        // 🛑 FIX: Refresh fail honay par sirf cookies clear karein.
-        // Page reload (window.location.href) NA karein. 
-        // App.jsx khud user ko logout state mein daal dega.
         Cookies.remove("access_token");
         Cookies.remove("refresh_token");
-        
-        // window.location.href = "/login"; // <--- YEH LINE HATA DI HAI (Loop ki wajah)
-        
         return Promise.reject(refreshError);
       }
     }
-
     return Promise.reject(error);
   }
 );
@@ -95,5 +81,25 @@ export const getVerificationStatus = async () => {
   const res = await api.get("/verification-status");
   return res.data;
 };
+
+// ✅ NEW: Image Upload Function
+// ✅ NEW: Image Upload Function with Debugging
+export const uploadImages = async (files) => {
+  const formData = new FormData();
+  files.forEach((file) => {
+    formData.append("files", file);
+  });
+
+  const res = await api.post("/upload/images", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+
+  // 🕵️‍♂️ DEBUG LOG 1: Check karein backend kya bhej raha hai
+  console.log("📸 Cloudinary Response (Raw):", res.data);
+
+  return res.data; 
+}; // Expected: { uploaded_urls: ["url1", "url2"] }
 
 export default api;
