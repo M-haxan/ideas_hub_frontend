@@ -100,6 +100,6 @@ export const uploadImages = async (files) => {
   console.log("📸 Cloudinary Response (Raw):", res.data);
 
   return res.data; 
-}; // Expected: { uploaded_urls: ["url1", "url2"] }
+}; 
 
 export default api;

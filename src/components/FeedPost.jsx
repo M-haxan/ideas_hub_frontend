@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -83,19 +83,9 @@ export default function FeedPost({ idea }) {
 
   const imageUrl = getImageUrl();
 
-  // ✅ PERMISSIONS CHECK (Robust Logic)
-  // Step 1: Check agar Backend 'can_edit' flag bhej raha hai
-  // Step 2: Agar nahi, to 'author_id' match kar ke check karo
-  
-  const postAuthorId = idea.author_id || idea.author?.id || idea.user_id;
-  
-  const canEdit = idea.can_edit ?? (user?.id === postAuthorId);
-  const canDelete = idea.can_delete ?? (user?.id === postAuthorId);
-
-  // Debugging (Console mein confirm kar lein k permissions true hain ya false)
-  // useEffect(() => {
-  //   if (user) console.log(`Post ${idea.id} Permissions:`, { canEdit, canDelete, postAuthorId });
-  // }, [user, idea]);
+  // ✅ PERMISSIONS (Ab hum backend ke flags use kar rahe hain)
+  const canEdit = idea.can_edit === true;
+  const canDelete = idea.can_delete === true;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6 hover:shadow-md transition duration-200">
@@ -121,7 +111,7 @@ export default function FeedPost({ idea }) {
             Details ↗
             </Link>
             
-            {/* ✅ Edit Button (Conditional) */}
+            {/* ✅ Buttons will now show correctly */}
             {canEdit && (
                 <Link 
                 to={`/ideas/edit/${idea.id}`}
@@ -131,7 +121,6 @@ export default function FeedPost({ idea }) {
                 </Link>
             )}
             
-            {/* ✅ Delete Button (Conditional) */}
             {canDelete && (
                 <button
                 onClick={() => handleDelete(idea.id)}
@@ -160,7 +149,7 @@ export default function FeedPost({ idea }) {
           <ReactMarkdown>{idea.current_version?.body_md || idea.body_md}</ReactMarkdown>
         </div>
 
-        {/* Image Display */}
+        {/* Image */}
         {imageUrl && (
           <div className="mt-3 rounded-lg overflow-hidden border border-gray-100 bg-black flex justify-center items-center">
             <img 
